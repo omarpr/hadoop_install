@@ -1,10 +1,10 @@
 ## About hadoop_install.sh
 
-This script is designed to install a Hadoop DFS, YARN and MapReduce **CentOS** cluster with 5 nodes (one of them master). This script was done by Pablo Rebollo (from the University of Puerto Rico) and was modified by me to add extra configuration required to use YARN and MapReduce.
+This script is designed to install a Hadoop DFS, YARN and MapReduce **CentOS** cluster with 5 nodes (one of them master). This script was done by Pablo Rebollo (from the University of Puerto Rico) and was modified by me to add an extra configuration required to use YARN and MapReduce.
 
 ## Installation
 
-To be able to use this script, the first thing that must be done is cloning this repository.
+To use this script, the first step is to clone this repository.
 
 ```
 git clone https://github.com/omarpr/hadoop_install
@@ -24,7 +24,7 @@ NODE04=136.140.210.5
 Copy the script to all the servers that you will have in the cluster. To install it, just run the script:
 
 ```shell
-./hadoop_install.sh
+sudo ./hadoop_install.sh
 ```
 
 Load the **.bash_profile** to have the environment variables ready:
@@ -51,4 +51,32 @@ Run the hadoop_install.sh on each data node (and load .bash_profile) and start t
 ```shell
 hadoop-daemon.sh start datanode
 yarn-daemon.sh start nodemanager
+```
+
+## Useful URLs
+
+HDFS Web Application
+
+```
+http://[Master IP]:50070
+```
+
+YARN Web Application
+
+```
+http://[Master IP]:8088
+```
+
+## Useful commands
+
+List directory contents
+
+```shell
+hdfs dfs -ls /
+```
+
+Make directory recursively
+
+```shell
+hdfs dfs -mkdir -p /a/path
 ```
