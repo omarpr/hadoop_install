@@ -1,6 +1,6 @@
 ## About hadoop_install.sh
 
-This script is designed to install a **CentOS** cluster with Hadoop DFS, YARN, MapReduce, Apache Hive and Spark of N nodes (one of them master). The original script was done by Pablo Rebollo (from the University of Puerto Rico) and was further improved by me.
+This script is designed to install a **CentOS 6** (and others yum-based OS) cluster with Hadoop DFS, YARN, MapReduce, Apache Hive and Spark of N nodes (one of them master). The original script was done by Pablo Rebollo (from the University of Puerto Rico) and was further improved by me.
 
 ## Installation
 
