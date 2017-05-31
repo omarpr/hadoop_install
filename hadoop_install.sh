@@ -31,6 +31,8 @@ function clean_installation {
         killall java
         killall java
         rm -rf /opt/hadoop
+        rm -rf /opt/spark
+        rm -rf /opt/apache-hive
 
 }
 
@@ -41,11 +43,36 @@ function update_os {
 
 }
 
+# Source: https://gist.github.com/n0ts/40dd9bd45578556f93e7
+function get_java_latest {
+
+  pcline get_java_latest
+
+  ext=rpm
+  jdk_version=8
+
+  if [ -n "$1" ]; then
+      if [ "$1" == "tar" ]; then
+          exit="tar.gz"
+      fi
+  fi
+
+  readonly url="http://www.oracle.com"
+  readonly jdk_download_url1="$url/technetwork/java/javase/downloads/index.html"
+  readonly jdk_download_url2=$(curl -s $jdk_download_url1 | egrep -o "\/technetwork\/java/\javase\/downloads\/jdk${jdk_version}-downloads-.+?\.html" | head -1 | cut -d '"' -f 1)
+  [[ -z "$jdk_download_url2" ]] && error "Could not get jdk download url - $jdk_download_url1"
+
+  readonly jdk_download_url3="${url}${jdk_download_url2}"
+  readonly jdk_download_url4=$(curl -s $jdk_download_url3 | egrep -o "http\:\/\/download.oracle\.com\/otn-pub\/java\/jdk\/[7-8]u[0-9]+\-(.*)+\/jdk-[7-8]u[0-9]+(.*)linux-x64.$ext" | tail -1)
+
+  JAVAURL=$jdk_download_url4
+
+}
+
 function set_java {
 
     pcline set_java
     wget --quiet --no-check-certificate --no-cookies --header "Cookie: oraclelicense=accept-securebackup-cookie" $JAVAURL -O $INSTALLERSDIR/jdk-linux-x64.rpm
-
 
     cd $INSTALLERSDIR
 
@@ -79,11 +106,12 @@ PATH=\$PATH:\$HOME/bin
 
 export PATH
 
-## JAVA env variables
+# JAVA env variables
 export JAVA_HOME=/usr/java/default
 export PATH=\$PATH:\$JAVA_HOME/bin
 export CLASSPATH=.:\$JAVA_HOME/jre/lib:\$JAVA_HOME/lib:\$JAVA_HOME/lib/tools.jar
-## HADOOP env variables
+
+# HADOOP env variables
 export HADOOP_HOME=/opt/hadoop
 export HADOOP_COMMON_HOME=\$HADOOP_HOME
 export HADOOP_HDFS_HOME=\$HADOOP_HOME
@@ -91,7 +119,18 @@ export HADOOP_MAPRED_HOME=\$HADOOP_HOME
 export HADOOP_YARN_HOME=\$HADOOP_HOME
 export HADOOP_OPTS="-Djava.library.path=\$HADOOP_HOME/lib/native"
 export HADOOP_COMMON_LIB_NATIVE_DIR=\$HADOOP_HOME/lib/native
-export PATH=\$PATH:\$HADOOP_HOME/sbin:\$HADOOP_HOME/bin
+
+export HIVE_HOME=/opt/apache-hive
+
+export HADOOP_CONF_DIR=\$HADOOP_HOME/etc/hadoop
+export YARN_CONF_DIR=\$HADOOP_CONF_DIR
+export SPARK_HOME=/opt/spark
+
+export PATH=\$PATH:\$HADOOP_HOME/sbin:\$HADOOP_HOME/bin:\$HIVE_HOME/bin:\$SPARK_HOME/bin
+
+export PYTHONPATH=\$SPARK_HOME/python/lib/py4j-0.10.4-src.zip:\$PYTHONPATH
+export PYSPARK_PYTHON=/usr/local/bin/python3.5
+export PYSPARK_DRIVER_PYTHON=/usr/local/bin/python3.5
 EOF
 
 cat > $INSTALLERSDIR/hdfs-site.xml.patch << EOF
@@ -129,10 +168,10 @@ cat > $INSTALLERSDIR/core-site.xml.patch << EOF
  <!-- Put site-specific property overrides in this file. -->
 
  <configuration>
-+<property>
-+   <name>fs.default.name</name>
-+   <value>hdfs://master:9000/</value>
-+</property>
++   <property>
++      <name>fs.default.name</name>
++      <value>hdfs://master:9000/</value>
++   </property>
  </configuration>
 EOF
 
@@ -166,7 +205,7 @@ EOF
 cat > $INSTALLERSDIR/yarn-site.xml.patch << EOF
 --- yarn-site.xml
 +++ yarn-site.xml
-@@ -15,5 +15,14 @@
+@@ -15,5 +15,22 @@
  <configuration>
 
  <!-- Site specific YARN configuration properties -->
@@ -179,60 +218,150 @@ cat > $INSTALLERSDIR/yarn-site.xml.patch << EOF
 +        <name>yarn.nodemanager.aux-services</name>
 +        <value>mapreduce_shuffle</value>
 +    </property>
++    <property>
++        <name>yarn.nodemanager.pmem-check-enabled</name>
++        <value>false</value>
++    </property>
++    <property>
++        <name>yarn.nodemanager.vmem-check-enabled</name>
++        <value>false</value>
++    </property>
 
  </configuration>
 EOF
 
-patch /opt/hadoop/etc/hadoop/yarn-site.xml $INSTALLERSDIR/yarn-site.xml.patch
+  patch /opt/hadoop/etc/hadoop/yarn-site.xml $INSTALLERSDIR/yarn-site.xml.patch
 
-cat > $INSTALLERSDIR/hosts.patch << EOF
---- hosts
-+++ hosts
-@@ -1,2 +1,7 @@
- 127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
- ::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
-+$MASTER master
-+$NODE01 data01
-+$NODE02 data02
-+$NODE03 data03
-+$NODE04 data04
-EOF
+  mkdir -p /export/hadoop/dfs/name
+  mkdir -p /export/hadoop/dfs/data
 
-patch /etc/hosts $INSTALLERSDIR/hosts.patch
+  chown -R $CUSER:root /export
 
-    mkdir -p /export/hadoop/dfs/name
-    mkdir -p /export/hadoop/dfs/data
-
-    chown -R $CUSER:root /export
-
-    #su - hadoop
 }
 
+function set_hosts {
+
+  pcline set_hosts
+
+  cd
+
+  i=0
+
+  for host in $(cat $NODESFILE) ; do
+    if [ "$i" -eq "0" ]; then
+      word="master"
+    else
+      printf -v ii "%02d" $i
+      word="data$ii"
+    fi
+
+    if ! grep -q "$host" /etc/hosts; then
+      echo "$host $word" >> /etc/hosts;
+    fi
+
+    i=$((i+1))
+  done;
+
+}
+
+function set_python3 {
+
+  pcline set_python3
+
+  yum -y install gcc
+
+  wget -P $INSTALLERSDIR --quiet -c $PYTHONURL
+  tar xzf $INSTALLERSDIR/Python-$PYTHONVER.tgz -C $INSTALLERSDIR
+
+cat > $INSTALLERSDIR/Modules_Setup.patch << EOF
+--- Setup
++++ Setup
+@@ -358,7 +358,7 @@
+ # Andrew Kuchling's zlib module.
+ # This require zlib 1.1.3 (or later).
+ # See http://www.gzip.org/zlib/
+-#zlib zlibmodule.c -I\$(prefix)/include -L\$(exec_prefix)/lib -lz
++zlib zlibmodule.c -I\$(prefix)/include -L\$(exec_prefix)/lib -lz
+
+ # Interface to the Expat XML parser
+ #
+EOF
+
+  patch $INSTALLERSDIR/Python-$PYTHONVER/Modules/Setup $INSTALLERSDIR/Modules_Setup.patch
+  
+  cd $INSTALLERSDIR/Python-$PYTHONVER/Modules/zlib
+
+  ./configure >> python3-make 2>&1
+  make >> python3-make 2>&1
+  make install >> python3-make 2>&1
+
+  cd $INSTALLERSDIR/Python-$PYTHONVER
+
+  ./configure >> python3-make 2>&1
+  make altinstall >> python3-make 2>&1
+
+  cd
+
+}
+
+function set_spark {
+
+  pcline set_spark
+  wget -P $INSTALLERSDIR --quiet -c $SPARKURL
+  tar xzf $INSTALLERSDIR/spark-$SPARKVER-bin-hadoop$SHADOOPVER.tgz -C $INSTALLERSDIR
+  rsync -a $INSTALLERSDIR/spark-$SPARKVER-bin-hadoop$SHADOOPVER/ /opt/spark/
+  chown -R $CUSER:root /opt/spark/
+
+}
+
+function set_hive {
+
+  pcline set_hive
+  wget -P $INSTALLERSDIR --quiet -c $HIVEURL
+  tar xzf $INSTALLERSDIR/apache-hive-$HIVEVER-bin.tar.gz -C $INSTALLERSDIR
+  rsync -a $INSTALLERSDIR/apache-hive-$HIVEVER-bin/ /opt/apache-hive/
+  chown -R $CUSER:root /opt/apache-hive/
+
+}
+
+if [[ ! `whoami` = "root" ]]; then
+    echo "You must have administrative privileges to run this script."
+    echo "Try 'sudo ./hadoop_install.sh'"
+    exit 1
+fi
+
+PWD=$(pwd)
 INSTALLERSDIR=$PWD/INSTALLERSDIR
 [[ -d $INSTALLERSDIR ]] || mkdir $INSTALLERSDIR
-
-JDKVER="1.8.0_121"
-JAVAVER="8u121"
-JAVAURL="http://download.oracle.com/otn-pub/java/jdk/$JAVAVER-b13/jdk-$JAVAVER-linux-x64.rpm"
-JAVAURL="http://download.oracle.com/otn-pub/java/jdk/8u121-b13/e9e7ea248e2c4826b92b3f075a80e441/jdk-8u121-linux-x64.rpm"
+NODESFILE=$PWD/nodes
 
 HADOOPVER="2.7.3"
 HADOOPURL="http://www-us.apache.org/dist/hadoop/common/hadoop-$HADOOPVER/hadoop-$HADOOPVER.tar.gz"
 
-JAVA_HOME=/usr/java/jdk$JDKVER
+PYTHONVER="3.5.2"
+PYTHONURL="https://www.python.org/ftp/python/$PYTHONVER/Python-$PYTHONVER.tgz"
+
+SPARKVER="2.1.1"
+SHADOOPVER="2.7"
+SPARKURL="http://apache.claz.org/spark/spark-$SPARKVER/spark-$SPARKVER-bin-hadoop$SHADOOPVER.tgz"
+
+HIVEVER="2.1.1"
+HIVEURL="http://apache.claz.org/hive/hive-$HIVEVER/apache-hive-$HIVEVER-bin.tar.gz"
+
+JAVA_HOME=/usr/java/default
 
 PATH=$JAVA_HOME/bin:$PATH
 
 export JAVA_HOME PATH
 
 CUSER=omar.soto2
-MASTER=136.140.210.1
-NODE01=136.140.210.2
-NODE02=136.140.210.3
-NODE03=136.140.210.4
-NODE04=136.140.210.5
 
 clean_installation
 update_os
+get_java_latest
 set_java
 set_hadoop
+set_hosts
+set_python3
+set_spark
+set_hive

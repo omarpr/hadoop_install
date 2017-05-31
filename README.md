@@ -1,6 +1,6 @@
 ## About hadoop_install.sh
 
-This script is designed to install a Hadoop DFS, YARN and MapReduce **CentOS** cluster with 5 nodes (one of them master). This script was done by Pablo Rebollo (from the University of Puerto Rico) and was modified by me to add an extra configuration required to use YARN and MapReduce.
+This script is designed to install a **CentOS** cluster with Hadoop DFS, YARN, MapReduce, Apache Hive and Spark of N nodes (one of them master). The original script was done by Pablo Rebollo (from the University of Puerto Rico) and was further improved by me.
 
 ## Installation
 
@@ -14,11 +14,16 @@ Then, modify the following lines of the file **hadoop_install.sh**. In them, you
 
 ```shell
 CUSER=omar.soto2
-MASTER=136.140.210.1
-NODE01=136.140.210.2
-NODE02=136.140.210.3
-NODE03=136.140.210.4
-NODE04=136.140.210.5
+```
+
+Modify the **nodes** file to add the IPs of all the nodes of the cluster. The first line of the file will correspond to the **master** node. The other lines will be identified as **dataXX** node.
+
+```
+136.145.216.XXX
+136.145.216.XXX
+136.145.216.XXX
+136.145.216.XXX
+...
 ```
 
 Copy the script to all the servers that you will have in the cluster. To install it, just run the script:
@@ -79,4 +84,39 @@ Make directory recursively
 
 ```shell
 hdfs dfs -mkdir -p /a/path
+```
+
+Balance HDFS with threshold 1%
+
+```shell
+export HADOOP_CLIENT_OPTS="-Xmx2048m $HADOOP_CLIENT_OPTS"
+hdfs balancer -threshold 1
+```
+
+Run PySpark console
+
+```shell
+pyspark --master yarn --deploy-mode client --conf='spark.executorEnv.PYTHONHASHSEED=223'
+```
+
+Submit PySpark application
+
+```shell
+spark-submit [code.py]
+```
+
+## PySpark Streaming Template
+```python
+from pyspark import SparkContext
+from pyspark.streaming import StreamingContext
+
+sc = SparkContext(appName="[Application Name]")
+sc.setLogLevel("WARN")
+
+ssc = StreamingContext(sc, 60)
+
+# Code to execute every 60 seconds.
+
+ssc.start()
+ssc.awaitTermination()
 ```
