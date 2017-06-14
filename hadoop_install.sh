@@ -49,7 +49,7 @@ function get_java_latest {
   pcline get_java_latest
 
   ext=rpm
-  jdk_version=8
+  jdk_version=$JDKVER
 
   if [ -n "$1" ]; then
       if [ "$1" == "tar" ]; then
@@ -120,6 +120,10 @@ export HADOOP_YARN_HOME=\$HADOOP_HOME
 export HADOOP_OPTS="-Djava.library.path=\$HADOOP_HOME/lib/native"
 export HADOOP_COMMON_LIB_NATIVE_DIR=\$HADOOP_HOME/lib/native
 
+#export SCALA_HOME=/opt/scala
+#export PATH=\$PATH:\$SCALA_HOME/bin
+#export CLASSPATH=\$CLASSPATH:\$SCALA_HOME/lib
+
 export HIVE_HOME=/opt/apache-hive
 
 export HADOOP_CONF_DIR=\$HADOOP_HOME/etc/hadoop
@@ -131,6 +135,9 @@ export PATH=\$PATH:\$HADOOP_HOME/sbin:\$HADOOP_HOME/bin:\$HIVE_HOME/bin:\$SPARK_
 export PYTHONPATH=\$SPARK_HOME/python/lib/py4j-0.10.4-src.zip:\$PYTHONPATH
 export PYSPARK_PYTHON=/usr/local/bin/python3.5
 export PYSPARK_DRIVER_PYTHON=/usr/local/bin/python3.5
+
+alias pip='/usr/local/bin/pip3.5'
+alias python='/usr/local/bin/python3.5'
 EOF
 
 cat > $INSTALLERSDIR/hdfs-site.xml.patch << EOF
@@ -239,6 +246,17 @@ EOF
 
 }
 
+function set_scala {
+
+  pcline set_scala
+
+  wget -P $INSTALLERSDIR --quiet -c $SCALAURL
+  tar xzf $INSTALLERSDIR/scala-$SCALAVER.tgz -C $INSTALLERSDIR
+  rsync -a $INSTALLERSDIR/scala-$SCALAVER/ /opt/scala/
+  chown -R $CUSER:root /opt/scala/
+
+}
+
 function set_hosts {
 
   pcline set_hosts
@@ -268,12 +286,12 @@ function set_python3 {
 
   pcline set_python3
 
-  yum -y install gcc
+  yum -y install gcc ncurses-devel readline-devel openssl-devel tk-devel
 
   wget -P $INSTALLERSDIR --quiet -c $PYTHONURL
   tar xzf $INSTALLERSDIR/Python-$PYTHONVER.tgz -C $INSTALLERSDIR
 
-cat > $INSTALLERSDIR/Modules_Setup.patch << EOF
+cat > $INSTALLERSDIR/Python-$PYTHONVER/Modules/Setup/Setup.patch << EOF
 --- Setup
 +++ Setup
 @@ -358,7 +358,7 @@
@@ -287,8 +305,8 @@ cat > $INSTALLERSDIR/Modules_Setup.patch << EOF
  #
 EOF
 
-  patch $INSTALLERSDIR/Python-$PYTHONVER/Modules/Setup $INSTALLERSDIR/Modules_Setup.patch
-  
+  patch $INSTALLERSDIR/Python-$PYTHONVER/Modules/Setup $INSTALLERSDIR/Python-$PYTHONVER/Modules/Setup/Setup.patch
+
   cd $INSTALLERSDIR/Python-$PYTHONVER/Modules/zlib
 
   ./configure >> python3-make 2>&1
@@ -299,6 +317,9 @@ EOF
 
   ./configure >> python3-make 2>&1
   make altinstall >> python3-make 2>&1
+
+  python3.5 -m ensurepip
+  pip3.5 install numpy
 
   cd
 
@@ -317,11 +338,24 @@ function set_spark {
 function set_hive {
 
   pcline set_hive
+
+  sudo yum -y install mysql-server mysql-connector-java
+  service mysqld start
+  /usr/bin/mysqladmin -u root password 'Clust3R'
+
+  mysql -u root -pClust3R -e "CREATE USER 'hiveuser'@'%' IDENTIFIED BY 'hivepassword';"
+  mysql -u root -pClust3R -e "GRANT all on *.* to 'hiveuser'@localhost identified by 'hivepassword';"
+  mysql -u root -pClust3R -e "FLUSH PRIVILEGES;"
+
+  ln -s /usr/share/java/mysql-connector-java.jar $HIVE_HOME/lib/mysql-connector-java.jar
+
   wget -P $INSTALLERSDIR --quiet -c $HIVEURL
   tar xzf $INSTALLERSDIR/apache-hive-$HIVEVER-bin.tar.gz -C $INSTALLERSDIR
   rsync -a $INSTALLERSDIR/apache-hive-$HIVEVER-bin/ /opt/apache-hive/
   chown -R $CUSER:root /opt/apache-hive/
 
+  $HIVE_HOME/bin/schematool -initSchema -dbType mysql
+  
 }
 
 if [[ ! `whoami` = "root" ]]; then
@@ -335,8 +369,13 @@ INSTALLERSDIR=$PWD/INSTALLERSDIR
 [[ -d $INSTALLERSDIR ]] || mkdir $INSTALLERSDIR
 NODESFILE=$PWD/nodes
 
+JDKVER="8"
+
 HADOOPVER="2.7.3"
 HADOOPURL="http://www-us.apache.org/dist/hadoop/common/hadoop-$HADOOPVER/hadoop-$HADOOPVER.tar.gz"
+
+SCALAVER="2.12.2"
+SCALAURL="http://downloads.typesafe.com/scala/$SCALAVER/scala-$SCALAVER.tgz"
 
 PYTHONVER="3.5.2"
 PYTHONURL="https://www.python.org/ftp/python/$PYTHONVER/Python-$PYTHONVER.tgz"
@@ -361,6 +400,7 @@ update_os
 get_java_latest
 set_java
 set_hadoop
+#set_scala
 set_hosts
 set_python3
 set_spark
