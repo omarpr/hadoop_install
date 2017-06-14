@@ -291,7 +291,7 @@ function set_python3 {
   wget -P $INSTALLERSDIR --quiet -c $PYTHONURL
   tar xzf $INSTALLERSDIR/Python-$PYTHONVER.tgz -C $INSTALLERSDIR
 
-cat > $INSTALLERSDIR/Python-$PYTHONVER/Modules/Setup/Setup.patch << EOF
+cat > $INSTALLERSDIR/Modules_Setup.patch << EOF
 --- Setup
 +++ Setup
 @@ -358,7 +358,7 @@
@@ -305,7 +305,7 @@ cat > $INSTALLERSDIR/Python-$PYTHONVER/Modules/Setup/Setup.patch << EOF
  #
 EOF
 
-  patch $INSTALLERSDIR/Python-$PYTHONVER/Modules/Setup $INSTALLERSDIR/Python-$PYTHONVER/Modules/Setup/Setup.patch
+  patch $INSTALLERSDIR/Python-$PYTHONVER/Modules/Setup $INSTALLERSDIR/Modules_Setup.patch
 
   cd $INSTALLERSDIR/Python-$PYTHONVER/Modules/zlib
 
@@ -318,8 +318,9 @@ EOF
   ./configure >> python3-make 2>&1
   make altinstall >> python3-make 2>&1
 
-  python3.5 -m ensurepip
-  pip3.5 install numpy
+  /usr/local/bin/python3.5 -m ensurepip
+  /usr/local/bin/pip3.5 install --upgrade pip
+  /usr/local/bin/pip3.5 install numpy
 
   cd
 
@@ -355,7 +356,7 @@ function set_hive {
   chown -R $CUSER:root /opt/apache-hive/
 
   $HIVE_HOME/bin/schematool -initSchema -dbType mysql
-  
+
 }
 
 if [[ ! `whoami` = "root" ]]; then
