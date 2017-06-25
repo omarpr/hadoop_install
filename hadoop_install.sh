@@ -355,6 +355,9 @@ function set_hive {
   rsync -a $INSTALLERSDIR/apache-hive-$HIVEVER-bin/ /opt/apache-hive/
   chown -R $CUSER:root /opt/apache-hive/
 
+  # Missing hive config.
+
+  . /home/$CUSER/.bash_profile
   $HIVE_HOME/bin/schematool -initSchema -dbType mysql
 
 }
@@ -383,10 +386,10 @@ PYTHONURL="https://www.python.org/ftp/python/$PYTHONVER/Python-$PYTHONVER.tgz"
 
 SPARKVER="2.1.1"
 SHADOOPVER="2.7"
-SPARKURL="http://apache.claz.org/spark/spark-$SPARKVER/spark-$SPARKVER-bin-hadoop$SHADOOPVER.tgz"
+SPARKURL="http://www-us.apache.org/dist/spark/spark-$SPARKVER/spark-$SPARKVER-bin-hadoop$SHADOOPVER.tgz"
 
 HIVEVER="2.1.1"
-HIVEURL="http://apache.claz.org/hive/hive-$HIVEVER/apache-hive-$HIVEVER-bin.tar.gz"
+HIVEURL="http://www-us.apache.org/dist/hive/hive-$HIVEVER/apache-hive-$HIVEVER-bin.tar.gz"
 
 JAVA_HOME=/usr/java/default
 
